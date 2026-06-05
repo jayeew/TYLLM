@@ -4,11 +4,15 @@ from app.schemas.common import AppBaseModel
 
 
 class AlertScanRequest(AppBaseModel):
+    """库存预警扫描请求，可按门店和 SKU 缩小扫描范围。"""
+
     store_code: str | None = None
     sku: Decimal | None = None
 
 
 class AlertScanResponse(AppBaseModel):
+    """库存预警扫描结果统计。"""
+
     success: bool
     scanned_count: int
     generated_count: int
@@ -16,6 +20,8 @@ class AlertScanResponse(AppBaseModel):
 
 
 class AlertItem(AppBaseModel):
+    """单条库存预警查询结果。"""
+
     id: int
     store_code: str
     sku: Decimal
@@ -30,4 +36,6 @@ class AlertItem(AppBaseModel):
 
 
 class AlertListResponse(AppBaseModel):
+    """库存预警列表响应。"""
+
     items: list[AlertItem]

@@ -1,1 +1,1 @@
-"""Core application settings and database utilities."""
+"""Calculation and rule modules."""

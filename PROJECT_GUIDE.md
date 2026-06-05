@@ -44,13 +44,13 @@
 ```text
 app/
 ├── main.py                  # FastAPI 应用入口
-├── core/                    # 配置和数据库连接
+├── config/                  # 配置和数据库连接
 ├── api/                     # 接口层，负责接收 HTTP 请求
 ├── schemas/                 # Pydantic 数据模型，负责请求和响应结构
 ├── services/                # 业务服务层，负责组织完整业务流程
 ├── repositories/            # 数据访问层，负责查询和写入数据库
-├── calculations/            # 计算规则层，负责纯业务公式和规则判断
-├── models/                  # SQLAlchemy ORM 模型，负责映射数据库表
+├── core/                    # 计算规则层，负责纯业务公式和规则判断
+├── mappers/                 # SQLAlchemy ORM 模型，负责映射数据库表
 └── tasks/                   # 任务入口，预留给定时任务或批处理
 
 sql/
@@ -95,7 +95,7 @@ app.main       找到 app/main.py 这个 Python 模块
 from fastapi import FastAPI
 
 from app.api.v1.router import api_router
-from app.core.config import settings
+from app.config.config import settings
 
 
 app = FastAPI(title=settings.app_name)
@@ -117,7 +117,7 @@ GET /api/v1/health
 
 ## 4. 配置是怎么加载的
 
-配置文件在 `app/core/config.py`。
+配置文件在 `app/config/config.py`。
 
 它使用 `pydantic-settings` 读取 `.env` 文件：
 
@@ -164,7 +164,7 @@ postgresql+psycopg://用户名:密码@数据库地址:端口/数据库名
 
 ## 5. 数据库连接是怎么创建和传递的
 
-数据库连接代码在 `app/core/database.py`：
+数据库连接代码在 `app/config/database.py`：
 
 ```python
 engine = create_engine(settings.database_url, future=True)
@@ -272,9 +272,9 @@ repositories/inventory_snapshot_repo.py
   ↓
 repositories/pos_transaction_repo.py
   ↓
-calculations/indicator_calculator.py
+core/indicator_calculator.py
   ↓
-calculations/alert_rule.py
+core/alert_rule.py
   ↓
 repositories/inventory_alert_repo.py
   ↓
@@ -495,7 +495,7 @@ snapshot.available_qty
 
 ### 7.6 ORM 模型负责中英文映射
 
-代码在 `app/models/fact_inventory_snapshot.py`：
+代码在 `app/mappers/fact_inventory_snapshot.py`：
 
 ```python
 class FactInventorySnapshot(Base):
@@ -564,7 +564,7 @@ def sum_sales_qty_last_7_days(
 
 ### 7.8 Calculation 层负责算指标
 
-代码在 `app/calculations/indicator_calculator.py`：
+代码在 `app/core/indicator_calculator.py`：
 
 ```python
 def calc_avg_daily_sales_7d(total_sales_qty: Decimal) -> Decimal:
@@ -620,7 +620,7 @@ def calc_days_to_expiry(batch_expiry_ts: int | None, now_ts: int) -> Decimal | N
 
 ### 7.9 Alert Rule 负责判断预警
 
-代码在 `app/calculations/alert_rule.py`：
+代码在 `app/core/alert_rule.py`：
 
 ```python
 def judge_alert(snapshot, avg_daily_sales: Decimal, coverage_days: Decimal, days_to_expiry):
@@ -847,7 +847,7 @@ payload + db → ForecastService
 
 ## 10. 补货预测公式怎么理解
 
-补货计算代码在 `app/calculations/forecast_rule.py`：
+补货计算代码在 `app/core/forecast_rule.py`：
 
 ```python
 def calculate_forecast(snapshot, avg_daily_sales: Decimal):
@@ -1340,15 +1340,14 @@ API 层只接收请求，Service 层编排业务流程，Repository 层读写数
 5. app/services/alert_service.py
 6. app/repositories/inventory_snapshot_repo.py
 7. app/repositories/pos_transaction_repo.py
-8. app/calculations/indicator_calculator.py
-9. app/calculations/alert_rule.py
+8. app/core/indicator_calculator.py
+9. app/core/alert_rule.py
 10. app/repositories/inventory_alert_repo.py
 11. app/api/v1/forecast_api.py
 12. app/services/forecast_service.py
-13. app/calculations/forecast_rule.py
-14. app/models/fact_inventory_snapshot.py
+13. app/core/forecast_rule.py
+14. app/mappers/fact_inventory_snapshot.py
 15. sql/01_schema.sql
 ```
 
 不要一开始就从所有文件一起看。先顺着一个接口请求走完，你会更容易理解整个后端项目。
-

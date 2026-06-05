@@ -16,9 +16,9 @@
 inventory_forecast_demo/
 ├── app/
 │   ├── api/
-│   ├── calculations/
+│   ├── config/
 │   ├── core/
-│   ├── models/
+│   ├── mappers/
 │   ├── repositories/
 │   ├── schemas/
 │   ├── services/
@@ -73,6 +73,24 @@ psql -d inventory_forecast_demo -f sql/02_seed_demo_data.sql
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
+
+## 本地脚本触发
+
+不启动 FastAPI 服务时，也可以直接通过本地脚本触发计算：
+
+```bash
+./run_local.sh --mode all
+```
+
+可选参数：
+
+```bash
+./run_local.sh --mode alerts --store-code STORE001 --sku 1001001
+./run_local.sh --mode forecasts --store-code 10001
+```
+
+`--mode` 支持 `all`、`alerts`、`forecasts`，不传时默认执行 `all`。
+如果需要绕过 shell 脚本，也可以直接执行 `python -m app.tasks.local_runner`。
 
 ## API 测试
 
