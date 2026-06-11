@@ -1,0 +1,118 @@
+CREATE VIEW view_sales_daily AS
+SELECT
+    sales_date_day AS `date`,
+
+    product_code AS `sku_id`,
+    product_name AS `sku_name`,
+
+    org_code AS `store_id`,
+    org_name AS `store_name`,
+
+    unit AS `unit`,
+
+    CAST(total_quantity, 'Decimal(18, 3)') AS `sales`,
+
+    CAST(
+        ifNull(
+            round(
+                toFloat64(total_amount) / nullIf(toFloat64(total_quantity), 0),
+                4
+            ),
+            0
+        ),
+        'Decimal(18, 4)'
+    ) AS `avg_price`,
+
+    CAST(total_amount, 'Decimal(18, 2)') AS `sales_amount`,
+
+    transaction_count AS `trans_cnt`,
+    cashier_count AS `cashier_cnt`
+FROM
+(
+    SELECT
+        sales_date_day,
+
+        product_code,
+        product_name,
+
+        org_code,
+        org_name,
+
+        unit,
+
+        sumMerge(total_quantity_state) AS total_quantity,
+        sumMerge(total_amount_state) AS total_amount,
+
+        uniqExactMerge(transaction_count_state) AS transaction_count,
+        uniqExactIfMerge(cashier_count_state) AS cashier_count
+    FROM dwm_sales
+    GROUP BY
+        sales_date_day,
+        product_code,
+        product_name,
+        org_code,
+        org_name,
+        unit
+);
+
+
+
+
+CREATE OR REPLACE VIEW view_sales_daily_clean AS
+SELECT
+    sales_date_day AS `date`,
+
+    product_code AS `sku_id`,
+    product_name AS `sku_name`,
+
+    org_code AS `store_id`,
+    org_name AS `store_name`,
+
+    unit AS `unit`,
+
+    CAST(total_quantity, 'Decimal(18, 3)') AS `sales`,
+
+    CAST(
+        ifNull(
+            round(
+                toFloat64(total_amount) / nullIf(toFloat64(total_quantity), 0),
+                4
+            ),
+            0
+        ),
+        'Decimal(18, 4)'
+    ) AS `avg_price`,
+
+    CAST(total_amount, 'Decimal(18, 2)') AS `sales_amount`,
+
+    transaction_count AS `trans_cnt`,
+    cashier_count AS `cashier_cnt`
+FROM
+(
+    SELECT
+        sales_date_day,
+
+        product_code,
+        product_name,
+
+        org_code,
+        org_name,
+
+        unit,
+
+        sumMerge(total_quantity_state) AS total_quantity,
+        sumMerge(total_amount_state) AS total_amount,
+
+        uniqExactMerge(transaction_count_state) AS transaction_count,
+        uniqExactIfMerge(cashier_count_state) AS cashier_count
+    FROM dwm_sales
+    WHERE org_name LIKE '%超市%'
+      AND org_name NOT LIKE '%王庆坨%'
+    GROUP BY
+        sales_date_day,
+        product_code,
+        product_name,
+        org_code,
+        org_name,
+        unit
+);

@@ -1,17 +1,15 @@
-from decimal import Decimal
-
 from app.schemas.common import AppBaseModel
 
 
 class ForecastCalculationRequest(AppBaseModel):
-    """补货预测计算请求，可按门店和 SKU 缩小计算范围。"""
+    """补货预测计算请求，可按 view_sales_daily_clean 的机构编码和 SKU 缩小范围。"""
 
-    store_code: str | None = None
-    sku: Decimal | None = None
+    org_code: str | None = None
+    sku: str | None = None
 
 
 class ForecastCalculationResponse(AppBaseModel):
-    """补货预测计算结果统计。"""
+    """补货预测计算占位结果统计。"""
 
     success: bool
     calculated_count: int
@@ -20,25 +18,7 @@ class ForecastCalculationResponse(AppBaseModel):
     message: str
 
 
-class ForecastItem(AppBaseModel):
-    """单条补货预测查询结果。"""
-
-    id: int
-    store_code: str
-    product_category: str
-    product_name: str
-    sku: Decimal
-    product_brand: str | None = None
-    product_spec: str | None = None
-    suggested_replenishment_date: int
-    suggested_qty: Decimal
-    main_supplier_name: str | None = None
-    supplier_code: Decimal | None = None
-    warehouse: str | None = None
-    estimated_arrival_time: int
-
-
 class ForecastListResponse(AppBaseModel):
-    """补货预测列表响应。"""
+    """补货预测占位列表响应。"""
 
-    items: list[ForecastItem]
+    items: list[dict]

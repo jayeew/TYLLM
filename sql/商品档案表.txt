@@ -1,0 +1,63 @@
+CREATE TABLE IF NOT EXISTS dim_product
+(
+    seq_no UInt32 COMMENT '序号',
+
+    product_code String COMMENT '商品编码',
+    international_barcode String COMMENT '国际条码',
+    product_name String COMMENT '商品名称',
+
+    product_created_at Nullable(DateTime) COMMENT '商品建档日期',
+    product_status LowCardinality(String) COMMENT '商品状态',
+
+    purchase_factor Decimal(18, 4) COMMENT '采购因子',
+
+    category_code String COMMENT '类别编号',
+    product_category LowCardinality(String) COMMENT '商品类别',
+
+    brand_code String COMMENT '品牌编码',
+    product_brand Nullable(String) COMMENT '商品品牌',
+
+    purchase_price Decimal(18, 4) COMMENT '进货价',
+    unit LowCardinality(String) COMMENT '单位',
+    specification Nullable(String) COMMENT '规格',
+
+    distribution_price Decimal(18, 4) COMMENT '配送价',
+    shelf_life_days Nullable(UInt32) COMMENT '保质天数',
+    origin Nullable(String) COMMENT '产地',
+
+    supplier_code String COMMENT '供应商编码',
+    supplier_name Nullable(String) COMMENT '供应商',
+
+    wholesale_price Decimal(18, 4) COMMENT '批发价',
+    retail_price Decimal(18, 4) COMMENT '零售价',
+
+    member_price Decimal(18, 4) COMMENT '会员价',
+    member_price_1 Decimal(18, 4) COMMENT '会员价一',
+    member_price_2 Decimal(18, 4) COMMENT '会员价二',
+
+    input_tax_rate Decimal(18, 4) COMMENT '进项税率',
+    output_tax_rate Decimal(18, 4) COMMENT '销项税率',
+
+    gross_profit_rate String COMMENT '毛利率',
+
+    daily_cost Decimal(18, 3) COMMENT '当日成本',
+    inventory_qty Decimal(18, 3) COMMENT '库存数量',
+    inventory_amount Decimal(18, 2) COMMENT '库存金额',
+    daily_avg_sales Decimal(18, 3) COMMENT '日均销量',
+
+    pricing_method LowCardinality(String) COMMENT '计价方式',
+    business_method LowCardinality(String) COMMENT '经营方式',
+
+    hot_product_flag LowCardinality(String) COMMENT '爆款', 
+    fresh_flag LowCardinality(String) COMMENT '生鲜标识',
+    points_flag LowCardinality(String) COMMENT '积分标识',
+
+    picking_group Nullable(String) COMMENT '拣货组', 
+    creator Nullable(String) COMMENT '创建人',
+
+    remark_1 Nullable(String) COMMENT '备注一',
+    remark_2 Nullable(String) COMMENT '备注二',
+    remark_3 Nullable(String) COMMENT '备注三'
+)
+ENGINE = MergeTree
+ORDER BY product_code;

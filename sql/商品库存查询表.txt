@@ -1,0 +1,57 @@
+CREATE TABLE IF NOT EXISTS dwd_product_stock
+(
+    seq_no UInt32 COMMENT '序号',
+
+    org_code String COMMENT '机构编码',
+    org_name LowCardinality(String) COMMENT '机构名称',
+
+    product_code String COMMENT '商品编码',
+    international_barcode String COMMENT '国际条码',
+
+    product_category_code String COMMENT '商品类别',
+    product_category_name LowCardinality(String) COMMENT '商品类别名称',
+
+    supplier_name Nullable(String) COMMENT '供应商',
+
+    unit LowCardinality(String) COMMENT '单位',
+    specification Nullable(String) COMMENT '规格',
+
+    product_name String COMMENT '商品名称',
+    product_status LowCardinality(String) COMMENT '商品状态',
+
+    inventory_qty Decimal(18, 3) COMMENT '库存数量',
+
+    retail_price Decimal(18, 4) COMMENT '零售价',
+    retail_amount Decimal(18, 2) COMMENT '零售金额',
+
+    cost_price Decimal(18, 4) COMMENT '成本价',
+    inventory_amount Decimal(18, 2) COMMENT '库存金额',
+
+    untaxed_cost_amount Decimal(18, 2) COMMENT '未税成本金额',
+
+    gross_profit_rate String COMMENT '毛利率',
+
+    large_package_qty Decimal(18, 3) COMMENT '大包装数量',
+
+    purchase_in_transit_qty Decimal(18, 3) COMMENT '采购在途数量',
+    sales_in_transit_qty Decimal(18, 3) COMMENT '销售在途数量',
+    requisition_in_transit_qty Decimal(18, 3) COMMENT '要货在途数量',
+    transfer_in_transit_qty Decimal(18, 3) COMMENT '调拨在途数量',
+
+    distribution_in_transit_qty Decimal(18, 3) COMMENT '配送在途数量',
+    distribution_out_transit_qty Decimal(18, 3) COMMENT '配退在途数量',
+
+    min_inventory_qty Decimal(18, 3) COMMENT '最小库存量',
+    max_inventory_qty Decimal(18, 3) COMMENT '最大库存量',
+
+    turnover_days Decimal(18, 2) COMMENT '周转天数',
+
+    last_sale_date Nullable(Date) COMMENT '最后一次销售日期',
+    last_purchase_date Nullable(Date) COMMENT '最后一次进货日期'
+)
+ENGINE = MergeTree
+ORDER BY
+(
+    org_code,
+    product_code
+);

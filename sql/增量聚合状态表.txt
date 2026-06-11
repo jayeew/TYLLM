@@ -1,0 +1,63 @@
+CREATE TABLE dwm_sales
+(
+    sales_date_day Date COMMENT '销售日期_天级',
+
+    product_code String COMMENT '商品编码',
+    product_name String COMMENT '商品名称',
+
+    org_code LowCardinality(String) COMMENT '机构编码',
+    org_name LowCardinality(String) COMMENT '机构名称',
+
+    unit LowCardinality(String) COMMENT '单位',
+
+    total_quantity_state AggregateFunction(sum, Decimal(18, 3)) COMMENT '当日总销量_聚合状态',
+    total_amount_state AggregateFunction(sum, Decimal(18, 2)) COMMENT '当日总销售额_聚合状态',
+
+    transaction_count_state AggregateFunction(uniqExact, String) COMMENT '当日交易笔数_聚合状态',
+    cashier_count_state AggregateFunction(uniqExactIf, String, UInt8) COMMENT '当日参与收银员数_聚合状态'
+)
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(sales_date_day)
+ORDER BY
+(
+    sales_date_day,
+    product_code,
+    org_code,
+    product_name,
+    org_name,
+    unit
+);
+
+
+数据插入
+INSERT INTO dwm_sales
+SELECT
+    toDate(sale_datetime) AS sales_date_day,
+
+    product_code AS product_code,
+    product_name AS product_name,
+
+    org_code AS org_code,
+    org_name AS org_name,
+
+    unit AS unit,
+
+    sumState(quantity) AS total_quantity_state,
+    sumState(amount) AS total_amount_state,
+
+    uniqExactState(document_no) AS transaction_count_state,
+
+    uniqExactIfState(
+        ifNull(cashier, ''),
+        ifNull(cashier, '') != ''
+    ) AS cashier_count_state
+FROM sales_flow
+GROUP BY
+    sales_date_day,
+    product_code,
+    product_name,
+    org_code,
+    org_name,
+    unit;
+
+

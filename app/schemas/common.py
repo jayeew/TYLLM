@@ -15,6 +15,7 @@ class AppBaseModel(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True,
+        extra="forbid",
         json_encoders={Decimal: serialize_decimal},
     )
 

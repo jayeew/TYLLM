@@ -1,0 +1,31 @@
+CREATE MATERIALIZED VIEW mview_sales_daily
+TO dwm_sales
+AS
+SELECT
+    toDate(sale_datetime) AS sales_date_day,
+
+    product_code AS product_code,
+    product_name AS product_name,
+
+    org_code AS org_code,
+    org_name AS org_name,
+
+    unit AS unit,
+
+    sumState(quantity) AS total_quantity_state,
+    sumState(amount) AS total_amount_state,
+
+    uniqExactState(document_no) AS transaction_count_state,
+
+    uniqExactIfState(
+        ifNull(cashier, ''),
+        ifNull(cashier, '') != ''
+    ) AS cashier_count_state
+FROM sales_flow
+GROUP BY
+    sales_date_day,
+    product_code,
+    product_name,
+    org_code,
+    org_name,
+    unit;

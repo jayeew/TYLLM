@@ -1,14 +1,15 @@
 # Inventory Forecast Demo
 
-基于 FastAPI + PostgreSQL 的库存预警与补货预测初版 Demo。
+基于 FastAPI + ClickHouse 的库存预警与补货预测占位项目。
+
+当前阶段只保留对 `view_sales_daily_clean` 的读取处理；所有预警、补货预测和指标计算规则均留空，用注释占位，不写入结果表。
 
 ## 功能范围
 
-- 导入基础数据、收银数据、库存快照数据
-- 手动触发库存预警扫描
-- 手动触发补货需求预测
-- 结果写入 PostgreSQL
-- 通过 API 查询预警结果和预测结果
+- 手动触发库存预警占位流程
+- 手动触发补货预测占位流程
+- 从 ClickHouse 读取 `view_sales_daily_clean`
+- 通过 API 查询空的预警/预测占位结果
 
 ## 项目结构
 
@@ -19,54 +20,46 @@ inventory_forecast_demo/
 │   ├── config/
 │   ├── core/
 │   ├── mappers/
-│   ├── repositories/
 │   ├── schemas/
 │   ├── services/
+│   ├── sources/
 │   ├── tasks/
 │   └── main.py
-├── sql/
-│   ├── 01_schema.sql
-│   └── 02_seed_demo_data.sql
 ├── requirements.txt
-├── .env.example
+├── .env
 └── README.md
 ```
 
 ## 环境准备
 
-建议使用 Python 3.11+ 和 PostgreSQL 14+。
+建议使用 Python 3.11+，并确保应用服务器可以访问 ClickHouse。
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 ```
 
-## 创建数据库
+## ClickHouse 配置
 
-```bash
-createdb inventory_forecast_demo
-```
-
-如果你已经有 PostgreSQL 数据库，也可以直接修改 `.env` 中的连接配置：
+项目固定使用 ClickHouse，不提供其他数据库连接选项。运行配置、业务变量和规则因子都放在 `.env` 中。
 
 ```env
-POSTGRES_RECORDMANAGER_HOST=127.0.0.1
-POSTGRES_RECORDMANAGER_PORT=5432
-POSTGRES_RECORDMANAGER_DATABASE=inventory_forecast_demo
-POSTGRES_RECORDMANAGER_USER=postgres
-POSTGRES_RECORDMANAGER_PASSWORD=postgres
+APP_NAME=inventory-forecast-demo
+API_PREFIX=/api/v1
+CLICKHOUSE_HOST=172.33.22.160
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DATABASE=sales_db
+CLICKHOUSE_USER=tjsk
+CLICKHOUSE_PASSWORD=123456
+CLICKHOUSE_SECURE=False
+CLICKHOUSE_CONNECT_TIMEOUT=10
+CLICKHOUSE_SEND_RECEIVE_TIMEOUT=60
+CLICKHOUSE_SALES_DAILY_TABLE=view_sales_daily_clean
+CLICKHOUSE_SALES_DAILY_QUERY_LIMIT=1000
 ```
 
-如果配置了完整的 `DATABASE_URL`，系统会优先使用 `DATABASE_URL`。
-
-## 初始化表结构和演示数据
-
-```bash
-psql -d inventory_forecast_demo -f sql/01_schema.sql
-psql -d inventory_forecast_demo -f sql/02_seed_demo_data.sql
-```
+`view_sales_daily_clean` 当前字段映射位于 `app/mappers/view_sales_daily_clean.py`。代码只读取该视图中的原始日销售记录，不计算近 7 天销量、日均销量、库存、在途、安全库存、补货数量或预警等级。
 
 ## 启动服务
 
@@ -76,21 +69,15 @@ uvicorn app.main:app --reload --port 8000
 
 ## 本地脚本触发
 
-不启动 FastAPI 服务时，也可以直接通过本地脚本触发计算：
+不启动 FastAPI 服务时，也可以直接通过本地脚本触发占位流程：
 
 ```bash
 ./run_local.sh --mode all
-```
-
-可选参数：
-
-```bash
-./run_local.sh --mode alerts --store-code STORE001 --sku 1001001
-./run_local.sh --mode forecasts --store-code 10001
+./run_local.sh --mode alerts --org-code 10001 --sku 0120005
+./run_local.sh --mode forecasts --org-code 10001
 ```
 
 `--mode` 支持 `all`、`alerts`、`forecasts`，不传时默认执行 `all`。
-如果需要绕过 shell 脚本，也可以直接执行 `python -m app.tasks.local_runner`。
 
 ## API 测试
 
@@ -100,7 +87,7 @@ uvicorn app.main:app --reload --port 8000
 curl http://localhost:8000/api/v1/health
 ```
 
-触发库存预警扫描：
+触发库存预警占位流程：
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/alerts/scan \
@@ -108,13 +95,13 @@ curl -X POST http://localhost:8000/api/v1/alerts/scan \
   -d '{}'
 ```
 
-查询库存预警结果：
+查询库存预警占位结果：
 
 ```bash
 curl http://localhost:8000/api/v1/alerts
 ```
 
-触发补货需求预测：
+触发补货预测占位流程：
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/forecasts/calculate \
@@ -122,24 +109,10 @@ curl -X POST http://localhost:8000/api/v1/forecasts/calculate \
   -d '{}'
 ```
 
-查询补货预测结果：
+查询补货预测占位结果：
 
 ```bash
 curl http://localhost:8000/api/v1/forecasts
-```
-
-按门店和 SKU 触发预警扫描：
-
-```bash
-curl -X POST http://localhost:8000/api/v1/alerts/scan \
-  -H "Content-Type: application/json" \
-  -d '{"store_code":"STORE001","sku":1001001}'
-```
-
-按门店和 SKU 查询预警：
-
-```bash
-curl "http://localhost:8000/api/v1/alerts?store_code=STORE001&sku=1001001"
 ```
 
 ## 接口列表
@@ -152,6 +125,6 @@ curl "http://localhost:8000/api/v1/alerts?store_code=STORE001&sku=1001001"
 
 ## 说明
 
-- 数据库字段名保留中文，ORM 使用英文属性映射。
-- Demo 运行时会在指定过滤条件下清空旧的预警/预测结果，便于重复测试。
-- `app/tasks/demo_runner.py` 提供了同时执行扫描和预测的简单入口，适合后续接定时任务。
+- 预警、补货预测、指标计算和结果查询均为占位实现。
+- 后续只有在业务规则、字段口径和可用数据对象被重新确认后，才新增计算或落库逻辑。
+- 不要在代码中猜测规则、字段含义或替代数据来源。
