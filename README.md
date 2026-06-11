@@ -22,9 +22,9 @@ inventory_forecast_demo/
 │   ├── config/
 │   ├── core/
 │   ├── mappers/
+│   ├── repositories/
 │   ├── schemas/
 │   ├── services/
-│   ├── sources/
 │   ├── tasks/
 │   └── main.py
 ├── requirements.txt

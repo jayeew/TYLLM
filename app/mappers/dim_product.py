@@ -1,7 +1,11 @@
-class DimProduct:
+from app.mappers.base import ClickHouseMapper
+
+
+class DimProduct(ClickHouseMapper):
     """dim_product 的显式列名映射。"""
 
     __tablename__ = "dim_product"
+    alias = "p"
     columns = {
         "seq_no": "seq_no",
         "product_code": "sku_id",

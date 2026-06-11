@@ -4,7 +4,10 @@ from uuid import uuid4
 from app.config.config import settings
 from app.config.database import ClickHouseClient
 from app.core.forecast_rule import calculate_forecasts
-from app.sources.clickhouse import ClickHouseSourceRepo
+from app.repositories.inventory_calculation_repo import InventoryCalculationRepo
+from app.repositories.replenishment_forecast_result_repo import (
+    ReplenishmentForecastResultRepo,
+)
 
 
 class ForecastService:
@@ -14,8 +17,9 @@ class ForecastService:
         self,
         db: ClickHouseClient,
     ) -> None:
-        """初始化本服务依赖的 ClickHouse 源表仓储。"""
-        self.source_repo = ClickHouseSourceRepo(settings, client=db)
+        """初始化本服务依赖的仓储。"""
+        self.calculation_repo = InventoryCalculationRepo(db)
+        self.forecast_result_repo = ReplenishmentForecastResultRepo(db)
 
     def calculate_forecasts(
         self,
@@ -27,7 +31,7 @@ class ForecastService:
         """计算补货预测并写入追加快照。"""
         resolved_calc_date = calc_date or date.today()
         run_id = uuid4().hex
-        input_records = self.source_repo.list_inventory_calculation_inputs(
+        input_records = self.calculation_repo.list_inputs(
             calc_date=resolved_calc_date,
             org_code=org_code,
             product_code=sku,
@@ -40,8 +44,8 @@ class ForecastService:
             calc_date=resolved_calc_date,
             run_id=run_id,
         )
-        self.source_repo.ensure_result_tables()
-        written_count = self.source_repo.insert_forecast_results(forecast_results)
+        self.forecast_result_repo.ensure_table()
+        written_count = self.forecast_result_repo.insert_many(forecast_results)
 
         return {
             "success": True,

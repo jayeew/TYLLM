@@ -34,10 +34,9 @@ app/
 │   ├── dim_product.py
 │   ├── dwd_product_stock.py
 │   └── view_sales_daily_clean.py
-├── repositories/        当前无活动仓储，仅保留包目录
+├── repositories/        ClickHouse 源表、计算输入和结果表仓储
 ├── schemas/             API 请求/响应模型
 ├── services/            应用服务层
-├── sources/             ClickHouse 源数据读取
 ├── tasks/               本地脚本入口
 └── main.py              FastAPI app 入口
 ```
@@ -110,24 +109,21 @@ CLICKHOUSE_RESULT_QUERY_LIMIT=1000
 - `trans_cnt` -> `trans_cnt`
 - `cashier_cnt` -> `cashier_cnt`
 
-`dim_product.py` 和 `dwd_product_stock.py` 按建表 SQL 中的列名一一显式映射。新增字段时，先在这里显式增加映射，再决定是否让 source 层查询该字段。
+`dim_product.py` 和 `dwd_product_stock.py` 按建表 SQL 中的列名一一显式映射。新增字段时，先在这里显式增加映射，再决定是否让 repository 层查询该字段。
 
-### `app/sources/`
+### `app/repositories/`
 
-源数据层负责从 ClickHouse 读取三张源表/视图、自动建结果表、写入结果快照并查询结果。
+仓储层负责所有直接对接 ClickHouse 的操作。Service 层不直接拼 SQL、不直接调用 `client.query()` 或 `client.insert()`。
 
-`sources/clickhouse.py` 当前只做这些事：
+当前主要仓储如下：
 
-- 按 `.env` 创建或复用 ClickHouse 连接。
-- 从 mapper 的 `columns` 生成 SELECT 列。
-- `view_sales_daily_clean` 支持按 `org_code` 和 `sku` 过滤。
-- `dim_product` 支持按 `product_code` 和 `international_barcode` 过滤。
-- `dwd_product_stock` 支持按 `org_code`、`product_code` 和 `international_barcode` 过滤。
-- 计算输入以 `dwd_product_stock` 为主驱动，左关联 `dim_product`，并聚合销售视图最近 7/15/30 天销量。
-- 结果表使用 `CREATE TABLE IF NOT EXISTS` 自动创建，结果写入采用追加快照，不覆盖历史。
-- 使用 ClickHouse query parameters 绑定过滤值。
-- quote 表名和字段名。
-- 返回 `list[dict]` 原始查询结果。
+- `sales_daily_repo.py`：读取 `view_sales_daily_clean`。
+- `dim_product_repo.py`：读取 `dim_product`。
+- `product_stock_repo.py`：读取 `dwd_product_stock`。
+- `inventory_calculation_repo.py`：以库存表为主驱动，左关联商品档案，并聚合销售视图最近 7/15/30 天销量。
+- `inventory_alert_result_repo.py`：创建、写入、查询预警结果表。
+- `replenishment_forecast_result_repo.py`：创建、写入、查询补货预测结果表。
+- `clickhouse_base.py`：封装通用 `query -> list[dict]` 和批量 insert。
 
 这里不做业务计算；公式和缺字段口径集中在 `app/core/`。
 
@@ -186,9 +182,9 @@ API 请求/响应模型。
 POST /api/v1/alerts/scan
   -> alert_api.scan_alerts()
   -> AlertService.scan_alerts()
-  -> ClickHouseSourceRepo.list_inventory_calculation_inputs()
+  -> InventoryCalculationRepo.list_inputs()
   -> core.judge_alerts()
-  -> ClickHouseSourceRepo.insert_alert_results()
+  -> InventoryAlertResultRepo.insert_many()
   -> 返回 run_id、scanned_count、generated_count、written_count
 ```
 
@@ -198,9 +194,9 @@ POST /api/v1/alerts/scan
 POST /api/v1/forecasts/calculate
   -> forecast_api.calculate_forecasts()
   -> ForecastService.calculate_forecasts()
-  -> ClickHouseSourceRepo.list_inventory_calculation_inputs()
+  -> InventoryCalculationRepo.list_inputs()
   -> core.calculate_forecasts()
-  -> ClickHouseSourceRepo.insert_forecast_results()
+  -> ReplenishmentForecastResultRepo.insert_many()
   -> 返回 run_id、calculated_count、generated_count、written_count
 ```
 
@@ -209,22 +205,22 @@ POST /api/v1/forecasts/calculate
 ```text
 GET /api/v1/alerts
   -> QueryService.list_alerts()
-  -> ClickHouseSourceRepo.list_alert_results()
+  -> InventoryAlertResultRepo.list_records()
   -> 返回 ads_inventory_alert_result 快照
 
 GET /api/v1/forecasts
   -> QueryService.list_forecasts()
-  -> ClickHouseSourceRepo.list_forecast_results()
+  -> ReplenishmentForecastResultRepo.list_records()
   -> 返回 ads_replenishment_forecast_result 快照
 
 GET /api/v1/products/dim-product
   -> ProductService.list_dim_products()
-  -> ClickHouseSourceRepo.list_dim_product_records()
+  -> DimProductRepo.list_records()
   -> 返回 dim_product 原始记录
 
 GET /api/v1/products/stock
   -> ProductService.list_product_stocks()
-  -> ClickHouseSourceRepo.list_product_stock_records()
+  -> ProductStockRepo.list_records()
   -> 返回 dwd_product_stock 原始记录
 ```
 
@@ -264,9 +260,9 @@ GET /api/v1/products/stock
 如果未来确认要新增数据源，建议按这个顺序改：
 
 1. 在 `app/mappers/` 增加显式字段映射。
-2. 在 `app/sources/` 增加只读方法。
+2. 在 `app/repositories/` 增加只读仓储方法。
 3. 在 `app/core/` 添加已确认的纯规则函数。
 4. 在 `app/services/` 串联流程。
-5. 最后再决定是否新增 repository 和结果表写入。
+5. 最后再决定是否新增结果表写入。
 
 编码字段如 `sku`、`org_code`、条码和品类编码都按字符串处理，避免丢失前导零。

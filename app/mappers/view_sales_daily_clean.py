@@ -1,7 +1,11 @@
-class ViewSalesDailyClean:
+from app.mappers.base import ClickHouseMapper
+
+
+class ViewSalesDailyClean(ClickHouseMapper):
     """view_sales_daily_clean 的显式列名映射。"""
 
     __tablename__ = "view_sales_daily_clean"
+    alias = "v"
     columns = {
         "sale_date": "date",
         "sku": "sku_id",

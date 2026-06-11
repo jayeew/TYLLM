@@ -1,15 +1,18 @@
 from datetime import date
 
-from app.config.config import settings
 from app.config.database import ClickHouseClient
-from app.sources.clickhouse import ClickHouseSourceRepo
+from app.repositories.inventory_alert_result_repo import InventoryAlertResultRepo
+from app.repositories.replenishment_forecast_result_repo import (
+    ReplenishmentForecastResultRepo,
+)
 
 
 class QueryService:
     """结果查询服务。"""
 
     def __init__(self, db: ClickHouseClient) -> None:
-        self.source_repo = ClickHouseSourceRepo(settings, client=db)
+        self.alert_result_repo = InventoryAlertResultRepo(db)
+        self.forecast_result_repo = ReplenishmentForecastResultRepo(db)
 
     def list_alerts(
         self,
@@ -20,8 +23,8 @@ class QueryService:
         limit: int | None = None,
     ) -> list[dict]:
         """查询库存预警结果表。"""
-        self.source_repo.ensure_result_tables()
-        return self.source_repo.list_alert_results(
+        self.alert_result_repo.ensure_table()
+        return self.alert_result_repo.list_records(
             run_id=run_id,
             calc_date=calc_date,
             org_code=org_code,
@@ -38,8 +41,8 @@ class QueryService:
         limit: int | None = None,
     ) -> list[dict]:
         """查询补货预测结果表。"""
-        self.source_repo.ensure_result_tables()
-        return self.source_repo.list_forecast_results(
+        self.forecast_result_repo.ensure_table()
+        return self.forecast_result_repo.list_records(
             run_id=run_id,
             calc_date=calc_date,
             org_code=org_code,

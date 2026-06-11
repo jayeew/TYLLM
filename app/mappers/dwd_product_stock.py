@@ -1,7 +1,11 @@
-class DwdProductStock:
+from app.mappers.base import ClickHouseMapper
+
+
+class DwdProductStock(ClickHouseMapper):
     """dwd_product_stock 的显式列名映射。"""
 
     __tablename__ = "dwd_product_stock"
+    alias = "s"
     columns = {
         "seq_no": "seq_no",
         "org_code": "org_code",
