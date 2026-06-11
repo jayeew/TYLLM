@@ -1,1 +1,1 @@
-"""Source data readers for view_sales_daily_clean."""
+"""Source data readers for ClickHouse views and source tables."""

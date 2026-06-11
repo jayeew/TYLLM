@@ -1,4 +1,5 @@
 import argparse
+from datetime import date
 import json
 from decimal import Decimal
 from typing import Any
@@ -39,6 +40,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="可选，商品编码/SKU；不传则处理全部商品。",
     )
+    parser.add_argument(
+        "--calc-date",
+        type=date.fromisoformat,
+        default=None,
+        help="可选，计算日，格式 YYYY-MM-DD；不传则使用服务运行当天。",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="可选，本次最多处理的库存行数。",
+    )
     return parser.parse_args()
 
 
@@ -46,6 +59,8 @@ def run_local(
     mode: str,
     org_code: str | None,
     sku: str | None,
+    calc_date: date | None,
+    limit: int | None,
 ) -> dict:
     """按指定模式执行本地触发任务。"""
     db = get_clickhouse_client()
@@ -54,6 +69,8 @@ def run_local(
             "alerts": AlertService(db).scan_alerts(
                 org_code=org_code,
                 sku=sku,
+                calc_date=calc_date,
+                limit=limit,
             )
         }
     if mode == "forecasts":
@@ -61,12 +78,16 @@ def run_local(
             "forecasts": ForecastService(db).calculate_forecasts(
                 org_code=org_code,
                 sku=sku,
+                calc_date=calc_date,
+                limit=limit,
             )
         }
     return run_demo(
         db=db,
         org_code=org_code,
         sku=sku,
+        calc_date=calc_date,
+        limit=limit,
     )
 
 
@@ -77,6 +98,8 @@ def main() -> None:
         mode=args.mode,
         org_code=args.org_code,
         sku=args.sku,
+        calc_date=args.calc_date,
+        limit=args.limit,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, default=decimal_default))
 

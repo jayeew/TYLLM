@@ -34,6 +34,24 @@ class Settings(BaseSettings):
     clickhouse_send_receive_timeout: int
     clickhouse_sales_daily_table: str
     clickhouse_sales_daily_query_limit: int
+    clickhouse_dim_product_table: str = "dim_product"
+    clickhouse_dim_product_query_limit: int = 1000
+    clickhouse_product_stock_table: str = "dwd_product_stock"
+    clickhouse_product_stock_query_limit: int = 1000
+    clickhouse_alert_result_table: str = "ads_inventory_alert_result"
+    clickhouse_forecast_result_table: str = "ads_replenishment_forecast_result"
+    clickhouse_result_query_limit: int = 1000
+
+    alert_level1_coverage_days: Decimal = Decimal("14")
+    alert_level2_coverage_days: Decimal = Decimal("7")
+    alert_level3_coverage_days: Decimal = Decimal("3")
+    alert_default_safety_stock_qty: Decimal = Decimal("0")
+    alert_expiring_stock_ratio_limit: Decimal = Decimal("0.5")
+
+    replenish_default_purchase_cycle_days: Decimal = Decimal("3")
+    replenish_safety_buffer_days: Decimal = Decimal("2")
+    replenish_default_min_order_qty: Decimal = Decimal("1")
+    replenish_default_pack_qty: Decimal = Decimal("1")
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,16 +1,16 @@
 # TYLLM Project Guide
 
-当前项目是一个 `FastAPI + ClickHouse` 的占位服务。现阶段只保留对
-`view_sales_daily_clean` 的读取处理；库存预警、补货预测、指标计算和结果落库均未实现，只保留明确的 TODO 占位。
+当前项目是一个 `FastAPI + ClickHouse` 的库存预警与补货预测服务。现阶段只使用
+`view_sales_daily_clean`、`dim_product` 和 `dwd_product_stock` 三张表/视图计算初版结果，并追加写入预警和补货结果快照表。
 
 ## 当前边界
 
-- 唯一读取的数据对象：`view_sales_daily_clean`。
-- 唯一有效输入字段映射：`app/mappers/view_sales_daily_clean.py`。
-- 不读取库存表、商品档案表、交易明细表或任何结果表。
-- 不写入预警结果表或预测结果表。
-- 不计算日均销量、修正因子、安全库存、有效库存、在途数量、预警等级、补货数量或到货时间。
-- 所有业务变量、规则因子和连接配置都从 `.env` 读取；当前规则因子只作为占位配置保留。
+- 当前读取的数据对象：`view_sales_daily_clean`、`dim_product`、`dwd_product_stock`。
+- 当前有效输入字段映射：`app/mappers/view_sales_daily_clean.py`、`app/mappers/dim_product.py`、`app/mappers/dwd_product_stock.py`。
+- 当前写入结果对象：`ads_inventory_alert_result`、`ads_replenishment_forecast_result`。
+- 不读取交易明细表、采购流水表、批次效期表或真实客流表。
+- 能计算日均销量、修正因子、库存覆盖、安全库存缺口、预警等级、在途数量、补货数量和建议日期。
+- 缺失的批次效期、破损、预订、采购流水、真实客流等字段在核心代码保留 TODO，并写入 `missing_fields`。
 
 ## 目录结构
 
@@ -21,6 +21,7 @@ app/
 │       ├── alert_api.py
 │       ├── forecast_api.py
 │       ├── health_api.py
+│       ├── product_api.py
 │       └── router.py
 ├── config/              配置和 ClickHouse client
 │   ├── config.py
@@ -29,7 +30,9 @@ app/
 │   ├── alert_rule.py
 │   ├── forecast_rule.py
 │   └── indicator_calculator.py
-├── mappers/             ClickHouse 视图字段映射
+├── mappers/             ClickHouse 视图和源表字段映射
+│   ├── dim_product.py
+│   ├── dwd_product_stock.py
 │   └── view_sales_daily_clean.py
 ├── repositories/        当前无活动仓储，仅保留包目录
 ├── schemas/             API 请求/响应模型
@@ -50,16 +53,17 @@ app/
 API 层只负责请求接入、依赖注入和响应模型包装，不写业务规则。
 
 - `api/deps.py`：预留请求校验入口，当前 `verify_request()` 直接返回 `True`。
-- `api/v1/router.py`：聚合 health、alerts、forecasts 三组路由。
+- `api/v1/router.py`：聚合 health、alerts、forecasts、products 四组路由。
 - `api/v1/health_api.py`：健康检查。
-- `api/v1/alert_api.py`：触发库存预警占位流程，查询空的预警占位结果。
-- `api/v1/forecast_api.py`：触发补货预测占位流程，查询空的预测占位结果。
+- `api/v1/alert_api.py`：触发库存预警计算，查询预警结果快照。
+- `api/v1/forecast_api.py`：触发补货预测计算，查询补货结果快照。
+- `api/v1/product_api.py`：查询 `dim_product` 和 `dwd_product_stock` 原始记录。
 
 ### `app/config/`
 
 配置层集中读取 `.env`，并创建 ClickHouse client。
 
-- `config.py`：定义 `Settings`。所有字段必须来自 `.env`，代码里不设置业务默认值。
+- `config.py`：定义 `Settings`。连接配置和业务因子来自 `.env`，源表表名和查询上限可通过 `.env` 覆盖。
 - `database.py`：创建并复用 ClickHouse client，同时把 ClickHouse 内网地址加入 `NO_PROXY`。
 
 当前关键配置：
@@ -77,9 +81,16 @@ CLICKHOUSE_CONNECT_TIMEOUT=10
 CLICKHOUSE_SEND_RECEIVE_TIMEOUT=60
 CLICKHOUSE_SALES_DAILY_TABLE=view_sales_daily_clean
 CLICKHOUSE_SALES_DAILY_QUERY_LIMIT=1000
+CLICKHOUSE_DIM_PRODUCT_TABLE=dim_product
+CLICKHOUSE_DIM_PRODUCT_QUERY_LIMIT=1000
+CLICKHOUSE_PRODUCT_STOCK_TABLE=dwd_product_stock
+CLICKHOUSE_PRODUCT_STOCK_QUERY_LIMIT=1000
+CLICKHOUSE_ALERT_RESULT_TABLE=ads_inventory_alert_result
+CLICKHOUSE_FORECAST_RESULT_TABLE=ads_replenishment_forecast_result
+CLICKHOUSE_RESULT_QUERY_LIMIT=1000
 ```
 
-`.env` 中的预警/补货因子目前只是占位变量，不参与任何计算。
+`.env` 中同时维护预警阈值、补货默认进货周期、安全缓冲天数、最小订货量和默认箱规。
 
 ### `app/mappers/`
 
@@ -99,42 +110,47 @@ CLICKHOUSE_SALES_DAILY_QUERY_LIMIT=1000
 - `trans_cnt` -> `trans_cnt`
 - `cashier_cnt` -> `cashier_cnt`
 
-新增字段时，先在这里显式增加映射，再决定是否让 source 层查询该字段。
+`dim_product.py` 和 `dwd_product_stock.py` 按建表 SQL 中的列名一一显式映射。新增字段时，先在这里显式增加映射，再决定是否让 source 层查询该字段。
 
 ### `app/sources/`
 
-源数据层负责从 ClickHouse 读取 `view_sales_daily_clean` 原始记录。
+源数据层负责从 ClickHouse 读取三张源表/视图、自动建结果表、写入结果快照并查询结果。
 
 `sources/clickhouse.py` 当前只做这些事：
 
 - 按 `.env` 创建或复用 ClickHouse 连接。
-- 从 `ViewSalesDailyClean.columns` 生成 SELECT 列。
-- 支持按 `org_code` 和 `sku` 过滤。
+- 从 mapper 的 `columns` 生成 SELECT 列。
+- `view_sales_daily_clean` 支持按 `org_code` 和 `sku` 过滤。
+- `dim_product` 支持按 `product_code` 和 `international_barcode` 过滤。
+- `dwd_product_stock` 支持按 `org_code`、`product_code` 和 `international_barcode` 过滤。
+- 计算输入以 `dwd_product_stock` 为主驱动，左关联 `dim_product`，并聚合销售视图最近 7/15/30 天销量。
+- 结果表使用 `CREATE TABLE IF NOT EXISTS` 自动创建，结果写入采用追加快照，不覆盖历史。
 - 使用 ClickHouse query parameters 绑定过滤值。
 - quote 表名和字段名。
 - 返回 `list[dict]` 原始查询结果。
 
-这里不做类型转换、不做字段语义推断、不做计算。
+这里不做业务计算；公式和缺字段口径集中在 `app/core/`。
 
 ### `app/core/`
 
-核心规则层当前全是空实现。
+核心规则层实现初版公式。
 
-- `alert_rule.py`：`judge_alerts()` 固定返回空列表。
-- `forecast_rule.py`：`calculate_forecast()` 固定返回 `None`。
-- `indicator_calculator.py`：`build_sales_indicators()` 固定返回空 dict。
+- `indicator_calculator.py`：计算 7/15/30 天销量回退、修正因子、日需求、覆盖天数、预计销售天数。
+- `alert_rule.py`：根据覆盖天数和安全库存缺口生成一级/二级/三级预警或库存充足状态。
+- `forecast_rule.py`：计算补货周期需求、安全库存、在途、缺口、MOQ/箱规取整和建议日期。
 
-这些文件只保留 TODO 注释。后续规则、公式、字段口径被确认前，不要在这里添加推测逻辑。
+批次效期、破损、预订、采购流水、客流趋势等当前缺字段逻辑只保留 TODO，不做隐式推断。
 
 ### `app/services/`
 
 服务层串联 API、source 和 core。
 
-- `alert_service.py`：读取 `view_sales_daily_clean`，调用空的 `judge_alerts()`，返回扫描数量和未生成结果的提示。
-- `forecast_service.py`：读取 `view_sales_daily_clean`，调用空的 `calculate_forecast()`，返回计算数量和未生成结果的提示。
-- `query_service.py`：结果查询占位，`list_alerts()` 和 `list_forecasts()` 都返回空列表。
+- `alert_service.py`：读取库存驱动计算输入，调用 `judge_alerts()`，写入预警结果表。
+- `forecast_service.py`：读取库存驱动计算输入，调用 `calculate_forecasts()`，写入补货结果表。
+- `product_service.py`：读取 `dim_product` 和 `dwd_product_stock` 原始记录。
+- `query_service.py`：查询预警和补货结果表，支持 `run_id`、`calc_date`、`org_code`、`sku`、`limit`。
 
-服务层当前不会清理、创建、写入或查询结果表。
+服务层会自动创建结果表，但不会清理或覆盖历史结果。
 
 ### `app/schemas/`
 
@@ -143,58 +159,73 @@ API 请求/响应模型。
 - `common.py`：统一 Pydantic 基类和健康检查响应。
 - `alert_schema.py`：预警扫描请求、预警扫描响应、预警列表响应。
 - `forecast_schema.py`：补货预测请求、补货预测响应、预测列表响应。
+- `product_schema.py`：商品档案列表响应、商品库存列表响应。
 
-列表响应当前是 `items: list[dict]`，因为结果明细口径尚未确认。
+列表响应当前是 `items: list[dict]`，直接返回 ClickHouse 结果快照行。
 
 ### `app/tasks/`
 
 本地命令行触发入口。
 
-- `local_runner.py`：解析 `--mode`、`--org-code`、`--sku`，调用对应服务。
-- `demo_runner.py`：顺序执行预警占位流程和补货预测占位流程。
+- `local_runner.py`：解析 `--mode`、`--org-code`、`--sku`、`--calc-date`、`--limit`，调用对应服务。
+- `demo_runner.py`：顺序执行预警流程和补货预测流程。
 
 脚本入口：
 
 ```bash
 ./run_local.sh --mode all
 ./run_local.sh --mode alerts --org-code 10001 --sku 0120005
-./run_local.sh --mode forecasts --org-code 10001
+./run_local.sh --mode forecasts --org-code 10001 --calc-date 2026-06-11 --limit 10
 ```
 
 ## 请求流程
 
-### 预警占位流程
+### 预警流程
 
 ```text
 POST /api/v1/alerts/scan
   -> alert_api.scan_alerts()
   -> AlertService.scan_alerts()
-  -> ClickHouseSourceRepo.list_sales_daily_records()
+  -> ClickHouseSourceRepo.list_inventory_calculation_inputs()
   -> core.judge_alerts()
-  -> 返回 scanned_count 和 generated_count=0
+  -> ClickHouseSourceRepo.insert_alert_results()
+  -> 返回 run_id、scanned_count、generated_count、written_count
 ```
 
-### 补货预测占位流程
+### 补货预测流程
 
 ```text
 POST /api/v1/forecasts/calculate
   -> forecast_api.calculate_forecasts()
   -> ForecastService.calculate_forecasts()
-  -> ClickHouseSourceRepo.list_sales_daily_records()
-  -> core.calculate_forecast()
-  -> 返回 calculated_count 和 generated_count=0
+  -> ClickHouseSourceRepo.list_inventory_calculation_inputs()
+  -> core.calculate_forecasts()
+  -> ClickHouseSourceRepo.insert_forecast_results()
+  -> 返回 run_id、calculated_count、generated_count、written_count
 ```
 
-### 查询占位流程
+### 查询流程
 
 ```text
 GET /api/v1/alerts
   -> QueryService.list_alerts()
-  -> 返回 []
+  -> ClickHouseSourceRepo.list_alert_results()
+  -> 返回 ads_inventory_alert_result 快照
 
 GET /api/v1/forecasts
   -> QueryService.list_forecasts()
-  -> 返回 []
+  -> ClickHouseSourceRepo.list_forecast_results()
+  -> 返回 ads_replenishment_forecast_result 快照
+
+GET /api/v1/products/dim-product
+  -> ProductService.list_dim_products()
+  -> ClickHouseSourceRepo.list_dim_product_records()
+  -> 返回 dim_product 原始记录
+
+GET /api/v1/products/stock
+  -> ProductService.list_product_stocks()
+  -> ClickHouseSourceRepo.list_product_stock_records()
+  -> 返回 dwd_product_stock 原始记录
 ```
 
 ## API 列表
@@ -204,6 +235,8 @@ GET /api/v1/forecasts
 - `GET /api/v1/alerts`
 - `POST /api/v1/forecasts/calculate`
 - `GET /api/v1/forecasts`
+- `GET /api/v1/products/dim-product`
+- `GET /api/v1/products/stock`
 
 ## 依赖说明
 
@@ -226,7 +259,7 @@ GET /api/v1/forecasts
 2. 字段口径是否明确。
 3. 业务规则和计算公式是否明确。
 
-确认前不要新增推测计算，不要从 `view_sales_daily_clean` 推导库存含义，也不要重新接入旧表或结果表。
+确认前不要从 `view_sales_daily_clean`、`dim_product` 或 `dwd_product_stock` 之外的数据对象推导尚未确认的业务含义。
 
 如果未来确认要新增数据源，建议按这个顺序改：
 

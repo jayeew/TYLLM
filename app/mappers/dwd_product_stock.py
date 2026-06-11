@@ -1,0 +1,37 @@
+class DwdProductStock:
+    """dwd_product_stock 的显式列名映射。"""
+
+    __tablename__ = "dwd_product_stock"
+    columns = {
+        "seq_no": "seq_no",
+        "org_code": "org_code",
+        "org_name": "org_name",
+        "product_code": "product_code",
+        "international_barcode": "international_barcode",
+        "product_category_code": "product_category_code",
+        "product_category_name": "product_category_name",
+        "supplier_name": "supplier_name",
+        "unit": "unit",
+        "specification": "specification",
+        "product_name": "product_name",
+        "product_status": "product_status",
+        "inventory_qty": "inventory_qty",
+        "retail_price": "retail_price",
+        "retail_amount": "retail_amount",
+        "cost_price": "cost_price",
+        "inventory_amount": "inventory_amount",
+        "untaxed_cost_amount": "untaxed_cost_amount",
+        "gross_profit_rate": "gross_profit_rate",
+        "large_package_qty": "large_package_qty",
+        "purchase_in_transit_qty": "purchase_in_transit_qty",
+        "sales_in_transit_qty": "sales_in_transit_qty",
+        "requisition_in_transit_qty": "requisition_in_transit_qty",
+        "transfer_in_transit_qty": "transfer_in_transit_qty",
+        "distribution_in_transit_qty": "distribution_in_transit_qty",
+        "distribution_out_transit_qty": "distribution_out_transit_qty",
+        "min_inventory_qty": "min_inventory_qty",
+        "max_inventory_qty": "max_inventory_qty",
+        "turnover_days": "turnover_days",
+        "last_sale_date": "last_sale_date",
+        "last_purchase_date": "last_purchase_date",
+    }

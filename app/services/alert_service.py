@@ -1,3 +1,6 @@
+from datetime import date
+from uuid import uuid4
+
 from app.config.config import settings
 from app.config.database import ClickHouseClient
 from app.core.alert_rule import judge_alerts
@@ -11,26 +14,40 @@ class AlertService:
         self,
         db: ClickHouseClient,
     ) -> None:
-        """初始化本服务依赖的销售视图仓储。"""
-        self.sales_repo = ClickHouseSourceRepo(settings, client=db)
+        """初始化本服务依赖的 ClickHouse 源表仓储。"""
+        self.source_repo = ClickHouseSourceRepo(settings, client=db)
 
     def scan_alerts(
         self,
         org_code: str | None = None,
         sku: str | None = None,
+        calc_date: date | None = None,
+        limit: int | None = None,
     ) -> dict:
-        """读取 view_sales_daily_clean，并保留预警规则占位。"""
-        sales_records = self.sales_repo.list_sales_daily_records(
+        """计算库存预警并写入追加快照。"""
+        resolved_calc_date = calc_date or date.today()
+        run_id = uuid4().hex
+        input_records = self.source_repo.list_inventory_calculation_inputs(
+            calc_date=resolved_calc_date,
             org_code=org_code,
-            sku=sku,
+            product_code=sku,
+            limit=limit,
         )
 
-        alert_results = judge_alerts(sales_records=sales_records)
-        # TODO: 预警结果写入方式待规则和结果表口径重新确认后再实现。
+        alert_results = judge_alerts(
+            input_records=input_records,
+            settings=settings,
+            calc_date=resolved_calc_date,
+            run_id=run_id,
+        )
+        self.source_repo.ensure_result_tables()
+        written_count = self.source_repo.insert_alert_results(alert_results)
 
         return {
             "success": True,
-            "scanned_count": len(sales_records),
+            "run_id": run_id,
+            "scanned_count": len(input_records),
             "generated_count": len(alert_results),
-            "message": "已读取 view_sales_daily_clean；预警规则尚未实现，未生成预警结果。",
+            "written_count": written_count,
+            "message": "已完成库存预警计算，并写入 ads_inventory_alert_result 快照。",
         }

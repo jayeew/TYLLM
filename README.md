@@ -1,15 +1,17 @@
 # Inventory Forecast Demo
 
-基于 FastAPI + ClickHouse 的库存预警与补货预测占位项目。
+基于 FastAPI + ClickHouse 的库存预警与补货预测项目。
 
-当前阶段只保留对 `view_sales_daily_clean` 的读取处理；所有预警、补货预测和指标计算规则均留空，用注释占位，不写入结果表。
+当前阶段只使用 `view_sales_daily_clean`、`dim_product` 和 `dwd_product_stock` 三张表/视图计算初版库存预警与补货预测，并把结果追加写入 ClickHouse 快照表。
 
 ## 功能范围
 
-- 手动触发库存预警占位流程
-- 手动触发补货预测占位流程
+- 手动触发库存预警计算并写入 `ads_inventory_alert_result`
+- 手动触发补货预测计算并写入 `ads_replenishment_forecast_result`
 - 从 ClickHouse 读取 `view_sales_daily_clean`
-- 通过 API 查询空的预警/预测占位结果
+- 从 ClickHouse 读取 `dim_product` 商品档案
+- 从 ClickHouse 读取 `dwd_product_stock` 商品库存
+- 通过 API 查询预警/预测结果快照
 
 ## 项目结构
 
@@ -57,9 +59,29 @@ CLICKHOUSE_CONNECT_TIMEOUT=10
 CLICKHOUSE_SEND_RECEIVE_TIMEOUT=60
 CLICKHOUSE_SALES_DAILY_TABLE=view_sales_daily_clean
 CLICKHOUSE_SALES_DAILY_QUERY_LIMIT=1000
+CLICKHOUSE_DIM_PRODUCT_TABLE=dim_product
+CLICKHOUSE_DIM_PRODUCT_QUERY_LIMIT=1000
+CLICKHOUSE_PRODUCT_STOCK_TABLE=dwd_product_stock
+CLICKHOUSE_PRODUCT_STOCK_QUERY_LIMIT=1000
+CLICKHOUSE_ALERT_RESULT_TABLE=ads_inventory_alert_result
+CLICKHOUSE_FORECAST_RESULT_TABLE=ads_replenishment_forecast_result
+CLICKHOUSE_RESULT_QUERY_LIMIT=1000
+
+ALERT_LEVEL1_COVERAGE_DAYS=14
+ALERT_LEVEL2_COVERAGE_DAYS=7
+ALERT_LEVEL3_COVERAGE_DAYS=3
+ALERT_DEFAULT_SAFETY_STOCK_QTY=0
+ALERT_EXPIRING_STOCK_RATIO_LIMIT=0.5
+
+REPLENISH_DEFAULT_PURCHASE_CYCLE_DAYS=3
+REPLENISH_SAFETY_BUFFER_DAYS=2
+REPLENISH_DEFAULT_MIN_ORDER_QTY=1
+REPLENISH_DEFAULT_PACK_QTY=1
 ```
 
-`view_sales_daily_clean` 当前字段映射位于 `app/mappers/view_sales_daily_clean.py`。代码只读取该视图中的原始日销售记录，不计算近 7 天销量、日均销量、库存、在途、安全库存、补货数量或预警等级。
+结果表建表语句位于 `sql/预警补货结果表.sql`。服务触发计算时也会自动执行 `CREATE TABLE IF NOT EXISTS`。
+
+初版能计算近 7/15/30 天日均销量、库存覆盖天数、修正后日需求、安全库存缺口、补货缺口和建议补货数量。批次效期、破损、预订、采购流水和真实客流字段当前缺失，相关逻辑在核心代码中保留 TODO，并写入结果表的 `missing_fields`。
 
 ## 启动服务
 
@@ -69,12 +91,12 @@ uvicorn app.main:app --reload --port 8000
 
 ## 本地脚本触发
 
-不启动 FastAPI 服务时，也可以直接通过本地脚本触发占位流程：
+不启动 FastAPI 服务时，也可以直接通过本地脚本触发计算流程：
 
 ```bash
 ./run_local.sh --mode all
 ./run_local.sh --mode alerts --org-code 10001 --sku 0120005
-./run_local.sh --mode forecasts --org-code 10001
+./run_local.sh --mode forecasts --org-code 10001 --calc-date 2026-06-11 --limit 10
 ```
 
 `--mode` 支持 `all`、`alerts`、`forecasts`，不传时默认执行 `all`。
@@ -87,32 +109,44 @@ uvicorn app.main:app --reload --port 8000
 curl http://localhost:8000/api/v1/health
 ```
 
-触发库存预警占位流程：
+触发库存预警计算：
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/alerts/scan \
   -H "Content-Type: application/json" \
-  -d '{}'
+  -d '{"calc_date":"2026-06-11","limit":10}'
 ```
 
-查询库存预警占位结果：
+查询库存预警结果：
 
 ```bash
-curl http://localhost:8000/api/v1/alerts
+curl "http://localhost:8000/api/v1/alerts?calc_date=2026-06-11&limit=10"
 ```
 
-触发补货预测占位流程：
+触发补货预测计算：
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/forecasts/calculate \
   -H "Content-Type: application/json" \
-  -d '{}'
+  -d '{"calc_date":"2026-06-11","limit":10}'
 ```
 
-查询补货预测占位结果：
+查询补货预测结果：
 
 ```bash
-curl http://localhost:8000/api/v1/forecasts
+curl "http://localhost:8000/api/v1/forecasts?calc_date=2026-06-11&limit=10"
+```
+
+查询商品档案源表记录：
+
+```bash
+curl "http://localhost:8000/api/v1/products/dim-product?product_code=0120005&limit=10"
+```
+
+查询商品库存源表记录：
+
+```bash
+curl "http://localhost:8000/api/v1/products/stock?org_code=10001&product_code=0120005&limit=10"
 ```
 
 ## 接口列表
@@ -122,9 +156,11 @@ curl http://localhost:8000/api/v1/forecasts
 - `GET /api/v1/alerts`
 - `POST /api/v1/forecasts/calculate`
 - `GET /api/v1/forecasts`
+- `GET /api/v1/products/dim-product`
+- `GET /api/v1/products/stock`
 
 ## 说明
 
-- 预警、补货预测、指标计算和结果查询均为占位实现。
-- 后续只有在业务规则、字段口径和可用数据对象被重新确认后，才新增计算或落库逻辑。
-- 不要在代码中猜测规则、字段含义或替代数据来源。
+- 结果采用追加快照，不覆盖历史批次。
+- 初版以 `dwd_product_stock` 的门店商品库存行为主驱动。
+- 缺少的批次效期、采购流水、真实客流等字段不会阻塞计算，但会记录在 `missing_fields`。
